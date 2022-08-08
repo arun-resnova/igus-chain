@@ -54,7 +54,7 @@ int processNum=0;
 unsigned long pressedTime  = 0;
 unsigned long releasedTime = 0;
 bool lcd_preset=false;
-
+int rpm=0;
 bool first_pass=true;
 void setup() {
   // put your setup code here, to run once:
@@ -84,7 +84,7 @@ void setup() {
   digitalWrite(SOLENOID_C,HIGH);
   
   attachInterrupt(digitalPinToInterrupt(PAUSE_SW), isr_pause_fun, RISING);
-  attachInterrupt(digitalPinToInterrupt(IR_IN), isr_rasp_pi_fun, RISING);
+  //attachInterrupt(digitalPinToInterrupt(IR_IN), isr_rasp_pi_fun, RISING);
   
   lcd.begin();
   lcd.backlight();
@@ -98,6 +98,7 @@ void setup() {
   lcd_update("PRESS HOME","","","");
   while(!reset_sw_input());
   initial_settings(); 
+  pi_interrupt=false;
 }
 
 void loop() {
@@ -152,12 +153,20 @@ void isr_pause_fun(){
   pause_interrupt=true;
 }
 void isr_rasp_pi_fun(){
-  pi_interrupt=true;
+  delay(50);
+  if(digitalRead(IR_IN)==HIGH)
+  {
+    pi_interrupt=true;
+    Serial.println("interrupt");
+  }
 }
 void releasing_block(){
-    while(!pi_interrupt);
+    Serial.println("releasing block start :");
+    Serial.print("pi_interrupt :");
+    Serial.println(pi_interrupt);
+    while(!check_ir_sensor());
     {
-       pi_interrupt=false;
+      
        digitalWrite(SOLENOID_B,LOW);
        delay(solenoid_delay*1000);
        digitalWrite(SOLENOID_B,HIGH);
@@ -166,6 +175,9 @@ void releasing_block(){
        digitalWrite(SOLENOID_A,LOW);
        delay(solenoid_delay*1000);
        digitalWrite(SOLENOID_A,HIGH);
+       // pi_interrupt=false;
+       // Serial.print("pi_interrupt :");
+       // Serial.println(pi_interrupt);
     }
     
 }
@@ -176,7 +188,7 @@ void plunging_process(){
    digitalWrite(PISTON_1,LOW);
    delay(piston_1_delay*1000);
    digitalWrite(PISTON_1,HIGH);
-   delay(piston_1_delay*1000);
+ //  delay(piston_1_delay*1000);
    digitalWrite(SOLENOID_C,HIGH);
    delay(solenoid_delay*1000);
 }
@@ -211,7 +223,6 @@ void offloading_process(){
     first_pass=true;
     target_temp++;
     lcd_update("","",home_display_status("NUM OF BLOCKS",block_num,blocks_per_len),home_display_status("TARGET",target_temp+1,target));
-    home_stepper_motor();
     if(target_temp==target){
        runningFlag=false;
        target_temp=0;
@@ -272,11 +283,12 @@ int fun_process(){
         plunging_process();
        first_pass=false;
        processNum=0;
+       block_num++;
     }
+    
   }
   return 1;
 }
-
 void stepper_inc_dec(bool dir,int steps){
   if(dir)
     digitalWrite(STEP_DIR,HIGH);
@@ -353,6 +365,11 @@ void initial_settings(){
   if(target >300 )
     target=300;
   delay(10);
+  //EEPROM.get(90,rpm);
+  //delay(10);
+  rpm=EEPROM.read(90);
+  if(rpm < 255)
+     convert_rpm_to_microsec(rpm);
   
   pause_interrupt=false;
   step_count=round(offset*((float)stepsPerRevoltion/30.0));
@@ -447,43 +464,6 @@ void target_edit_menu(bool * ptr){
 }
 
 /*
-FUNCTION   : long_press()
-DESCRIPTION : "Function to control eeprom values"
-PARAMETERS  : NONE
-RETURN TYPE : void 
-*//*
-void long_press(){
-  float option=2;
-  int change;
-  bool exitFlag=false,update_lcd=false;
-  lcd.clear();
-  lcd_update(" SETTINGS","><<BACK"," ENTER PASSWORD"," FORGOT PASSWORD");
-  while(!exitFlag){
-    if(update_lcd){
-      option=2;
-      lcd.clear();
-      lcd_update(" SETTINGS","><<BACK"," ENTER PASSWORD"," FORGOT PASSWORD");
-      update_lcd=false;
-      lcd_selection(option);
-    }
-    if (encoder_change(&option, 1) )
-    {
-      if (option <2) option = 2;
-      if (option >4) option = 4;
-      lcd_selection(option);
-    }
-    change=(int)option;
-    switch(change){
-        case 2: return_longpress(&exitFlag);break;
-        case 3: enter_password(&update_lcd);break;
-        case 4: forgot_password(&exitFlag);break;
-        
-      }
-  }
-  lcd_preset=true;
-}
-*/
-/*
 FUNCTION   : return_longpress(bool *ptr)
 DESCRIPTION : "take back to the home page"
 PARAMETERS  : NONE
@@ -497,65 +477,32 @@ void return_longpress(bool *ptr){
     *ptr =true;
   }
 }
-/*
-void enter_password(bool * ptr){
-  if (enc_sw_read(0))
-  {
-    enc_sw_read(1);
-    float temp_pass=100;
-    lcd.clear();
-    lcd_update("","PASSWORD","","");
-    lcd_update_value_only(temp_pass,1,1);
-    
-    while(true){
-      if (encoder_change(&temp_pass, 1) )
-      {
-        if (temp_pass <= 100) temp_pass = 100;
-        if (temp_pass >= 999) temp_pass = 999;
-        Serial.print("EDIT Value: ");
-        Serial.println(temp_pass);
-        lcd_update_value_only(temp_pass,1,1);
-      }
-      if(enc_sw_read(0)){
-        enc_sw_read(1);
-        if(temp_pass== password){
-          menu_function();
-        }
-        else{
-          lcd.clear();
-          lcd_update("","WRONG PASSWORD","","");
-          delay(2000);
-        }
-        break;   
-      }
-    }
-    *ptr =true;
-  }
-}*/
+
 void menu_function(){
-  float option=2;
+  float option=1;
   int change;
   bool menuExit=false,menuLcd=false;
   lcd.clear();
-  lcd_update(" SETTINGS","><<BACK"," STEPPER SETTINGS"," DELAY SETTINGS");
+  lcd_update("><<BACK"," STEPPER SETTINGS"," DELAY SETTINGS"," STEPPER SPEED");
   while(!menuExit){
     if(menuLcd){
       lcd.clear();
-      lcd_update(" SETTINGS"," <<BACK"," STEPPER SETTINGS"," DELAY SETTINGS");
+      lcd_update(" <<BACK"," STEPPER SETTINGS"," DELAY SETTINGS"," STEPPER SPEED");
       menuLcd=false;
       lcd_selection(option);
     }
     if (encoder_change(&option, 1) )
     {
-      if (option <2) option = 2;
+      if (option <1) option = 1;
       if (option >4) option = 4;
       lcd_selection(option);
     }
     change=(int)option;
     switch(change){
-        case 2: return_longpress(&menuExit);break;
-        case 3: stepper_settings_menu(&menuLcd);break;
-        case 4: delay_settings_menu(&menuLcd);break;
+        case 1: return_longpress(&menuExit);break;
+        case 2: stepper_settings_menu(&menuLcd);break;
+        case 3: delay_settings_menu(&menuLcd);break;
+        case 4: speed_settings(&menuLcd);break;
       }
   }
   lcd_preset=true; 
@@ -704,7 +651,7 @@ void piston_2_edit_menu(bool * ptr){
 void solenoid_edit_menu(bool * ptr){
   float temp_solenoid_delay;
   temp_solenoid_delay=solenoid_delay;
-  if(common_edit_fun("OFFLOAD ",&temp_solenoid_delay,0.1,4,0.1,0)){
+  if(common_edit_fun("SOLENOID DELAY ",&temp_solenoid_delay,0.1,4,0.1,0)){
       int ret =save_choice_menu();
       if( ret == 3){
         solenoid_delay=temp_solenoid_delay;
@@ -716,106 +663,24 @@ void solenoid_edit_menu(bool * ptr){
       *ptr= true; 
   }
 }
-/*
-bool forgot_password( bool *ptr){
-  if(enc_sw_read(0)){
-    enc_sw_read(1);
-    lcd.clear();
-    lcd_update("","ENTER FIRST INPUT","","");
-    while(!pause_sw_input()){
-      if(start_sw_input() | !digitalRead(ENC_SW)){
-        lcd.clear();
-        lcd_update("","WRONG SEQUENCE","","");
-        *ptr=true;
-        pause_interrupt=false;
-        delay(2000);
-        return 0;
+void speed_settings(bool *ptr){
+
+  float temp_speed;
+  temp_speed =rpm;
+  if(common_edit_fun("RPM ",&temp_speed,2,255,1,1)){
+      int ret =save_choice_menu();
+      *ptr= true;
+      if( ret == 3){
+        rpm=temp_speed;
+        convert_rpm_to_microsec(rpm);
       }
-    }
-    delay(200);
-    lcd.clear();
-    lcd_update("","ENTER SECOND INPUT","","");
-    while(!start_sw_input()){
-      if(pause_sw_input() | !digitalRead(ENC_SW)){
-        lcd.clear();
-        lcd_update("","WRONG SEQUENCE","","");
-        *ptr=true;
-        pause_interrupt=false;
-        delay(2000);
-        return 0;
+      else if( ret ==4){
+        rpm=temp_speed;
+        EEPROM.write(90,temp_speed);
+        convert_rpm_to_microsec(rpm);
       }
-    }
-    delay(200);
-    lcd.clear();
-    lcd_update("","ENTER THIRD INPUT","","");
-    while(!start_sw_input()){
-      if(pause_sw_input() | !digitalRead(ENC_SW)){
-        lcd.clear();
-        lcd_update("","WRONG SEQUENCE","","");
-        *ptr=true;
-        pause_interrupt=false;
-        delay(2000);
-        return 0;
-      }
-    }
-    delay(200);
-    lcd.clear();
-    lcd_update("","ENTER FOURTH INPUT","","");
-    while(digitalRead(ENC_SW)){
-      if(pause_sw_input() | start_sw_input()){
-        lcd.clear();
-        lcd_update("","WRONG SEQUENCE","","");
-        delay(2000);
-        *ptr=true;
-        pause_interrupt=false;
-        return 0;
-      }
-    }
-    delay(200);
-    lcd.clear();
-    lcd_update("","ENTER FIFTH INPUT","","");
-    while(!pause_sw_input()){
-      if(start_sw_input() | !digitalRead(ENC_SW)){
-        lcd.clear();
-        lcd_update("","WRONG SEQUENCE","","");
-        delay(2000);
-        *ptr=true;
-        pause_interrupt=false;
-        return 0;
-      }
-    }
-    delay(200);
-    lcd.clear();
-    float temp_pass;
-    temp_pass=password;
-    lcd_update("<< EDIT PASSWORD","","","");
-    lcd_update_value_only(temp_pass,1,1);
-    while(1){
-      if (encoder_change(&temp_pass, 1) )
-      {
-        if (temp_pass <= 100) temp_pass = 100;
-        if (temp_pass >= 999) temp_pass = 999;
-        Serial.print("EDIT Value: ");
-        Serial.println(temp_pass);
-        lcd_update_value_only(temp_pass,1,1);
-      }
-      if(enc_sw_read(0)){
-        enc_sw_read(1);
-        lcd.clear();
-        lcd_update("","SAVING NEW PASSWORD","","");
-        password=temp_pass;
-        EEPROM.put(50,password); 
-        delay(1000);
-        *ptr=true;
-        pause_interrupt=false;
-        return 1;  
-      }
-    }
   }
 }
-
-*/
-/*
 void convert_rpm_to_microsec(unsigned int spd){
   unsigned int temp = 1;
   Serial.print("spd : ");
@@ -824,8 +689,6 @@ void convert_rpm_to_microsec(unsigned int spd){
   temp *= (stepsPerRevoltion/100)  ;
   Serial.print("temp : ");
   Serial.println(temp);
-  //Serial.print("rpm : ");
-  //Serial.println(spd);
   double value;
   value = (60.0*10)/temp;
   Serial.print("value : ");
@@ -835,7 +698,7 @@ void convert_rpm_to_microsec(unsigned int spd){
   Serial.print("microseconds : ");
   Serial.println(microSecnds);
 }
-*/
+
 int save_choice_menu(){
   lcd.clear();
   lcd_update(" CHOOSE",">DON'T SAVE"," SAVE"," SAVE AS DEFAULT");
