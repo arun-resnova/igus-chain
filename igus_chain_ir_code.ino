@@ -222,6 +222,7 @@ void offloading_process(){
     block_num=1;
     first_pass=true;
     target_temp++;
+	home_stepper_motor();
     lcd_update("","",home_display_status("NUM OF BLOCKS",block_num,blocks_per_len),home_display_status("TARGET",target_temp+1,target));
     if(target_temp==target){
        runningFlag=false;
