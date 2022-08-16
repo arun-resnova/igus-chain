@@ -377,6 +377,7 @@ void initial_settings(){
   Serial.print("step count = ");
   Serial.println(step_count);
   home_stepper_motor();
+  runningFlag=false;
   
 }
 void home_stepper_motor(){
@@ -396,6 +397,7 @@ void home_stepper_motor(){
   }
   delay(100);
   digitalWrite(STEP_DIR,HIGH);
+  step_count=round(offset*((float)stepsPerRevoltion/30.0));
   for(int i=0;i<step_count;i++){
     digitalWrite(STEP_PUL,HIGH);
     delayMicroseconds(microSecnds);
@@ -403,7 +405,7 @@ void home_stepper_motor(){
     delayMicroseconds(microSecnds);
   }
   digitalWrite(SOLENOID_C,HIGH);
-  runningFlag=false;
+
 }
 void short_press(){
   float option=2;
