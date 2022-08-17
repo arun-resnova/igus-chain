@@ -214,15 +214,16 @@ void offloading_process(){
     stepper_inc_dec(1,step_count);
     digitalWrite(PISTON_2,HIGH);
     delay(piston_2_delay*1000);
-    digitalWrite(SOLENOID_C,LOW);
-    delay(solenoid_delay*1000);
-    stepper_inc_dec(0,step_count);
-    digitalWrite(SOLENOID_C,HIGH);
-    delay(solenoid_delay*1000);
+	home_stepper_motor();
+    // digitalWrite(SOLENOID_C,LOW);
+    // delay(solenoid_delay*1000);
+    // stepper_inc_dec(0,step_count);
+    // digitalWrite(SOLENOID_C,HIGH);
+    // delay(solenoid_delay*1000);
     block_num=1;
     first_pass=true;
     target_temp++;
-	home_stepper_motor();
+	
     lcd_update("","",home_display_status("NUM OF BLOCKS",block_num,blocks_per_len),home_display_status("TARGET",target_temp+1,target));
     if(target_temp==target){
        runningFlag=false;
